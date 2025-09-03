@@ -1,0 +1,26 @@
+# Python / venv
+.venv/
+__pycache__/
+*.pyc
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Secrets
+.env
+.env.*
+
+# Generated data (DO NOT COMMIT)
+app/data/vectorstore/
+*.sqlite3
+*.bin
+*.pickle
+
+# Raw source dumps (host elsewhere; fetch via script)
+app/data/source_pdfs/
+
+# Logs
+*.log
