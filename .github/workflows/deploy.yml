@@ -21,7 +21,7 @@ jobs:
         source: "."
         target: "~/rigbot"
 
-    - name: Restart Docker container
+    - name: Rebuild and restart container on EC2
       uses: appleboy/ssh-action@v1.0.0
       with:
         host: ${{ secrets.EC2_HOST }}
@@ -29,8 +29,16 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         script: |
           cd ~/rigbot
-          docker build -t rigbot .
+          echo "🧹 Cleaning old Docker images..."
+          docker system prune -af || true
+
+          echo "🐳 Building new Docker image..."
+          docker build --no-cache -t rigbot .
+
+          echo "🛑 Stopping old container..."
           docker rm -f rigbot || true
+
+          echo "🚀 Starting new container..."
           docker run -d --name rigbot --restart unless-stopped \
             -p 80:8000 \
             --env-file .env \
@@ -38,3 +46,4 @@ jobs:
             -v /data/rigbot/vectorstore:/app/app/data/vectorstore \
             -v /data/rigbot/hf_cache:/root/.cache/huggingface \
             rigbot
+          echo "✅ Deployment complete!"
