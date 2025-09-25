@@ -20,6 +20,7 @@ def search(req: dict):
             "page": h.page,
             "score_vec": h.score_vec,
             "score_bm25": h.score_bm25,
-            "snippet": (h.text[:400] + "…") if len(h.text) > 400 else h.text,
+            "snippet": (h.text[:400] + "...") if len(h.text) > 400 else h.text,
         })
     return JSONResponse({"results": out})
+
