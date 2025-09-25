@@ -2,11 +2,13 @@ from typing import Optional
 import pytesseract
 from PIL import Image
 import fitz
-from app.services.config import TESSERACT_LANGS, OCR_DPI_SCALE
+from app.services import config
 
 def ocr_page(page: "fitz.Page") -> str:
-    mat = fitz.Matrix(OCR_DPI_SCALE, OCR_DPI_SCALE)
+    dpi = float(getattr(config.ENV, "OCR_DPI_SCALE", 2.0))
+    mat = fitz.Matrix(dpi, dpi)
     pix = page.get_pixmap(matrix=mat, alpha=False)
     img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-    text = pytesseract.image_to_string(img, lang=TESSERACT_LANGS)
+    lang = getattr(config.ENV, "TESSERACT_LANGS", "eng") or "eng"
+    text = pytesseract.image_to_string(img, lang=lang)
     return text or ""
