@@ -8,8 +8,12 @@ __pycache__/
 .venv/
 
 # App data
-app/data/vectorstore/
 app/data/processed/
+
+# Ignore vector DB and heavy PDFs
+app/data/vectorstore/
+app/data/source_pdfs/*.pdf
+
 
 # OS/editor noise
 .DS_Store
