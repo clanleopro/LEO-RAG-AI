@@ -2,7 +2,7 @@ name: Deploy to EC2
 
 on:
   push:
-    branches: ["main"]   # runs when you push to main branch
+    branches: ["main"]   # Trigger deploy only when pushing to main branch
 
 jobs:
   deploy:
@@ -27,8 +27,10 @@ jobs:
         host: ${{ secrets.EC2_HOST }}
         username: ${{ secrets.EC2_USER }}
         key: ${{ secrets.EC2_SSH_KEY }}
+        timeout: 60m   # ⏳ Allow up to 60 minutes for build
         script: |
           cd ~/rigbot
+          
           echo "🧹 Cleaning old Docker images..."
           docker system prune -af || true
 
@@ -46,4 +48,5 @@ jobs:
             -v /data/rigbot/vectorstore:/app/app/data/vectorstore \
             -v /data/rigbot/hf_cache:/root/.cache/huggingface \
             rigbot
+
           echo "✅ Deployment complete!"
