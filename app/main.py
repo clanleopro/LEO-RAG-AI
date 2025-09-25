@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 
 # Load .env from repo root explicitly
 try:
@@ -63,11 +65,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+start_time = time.time()
 # Health & info
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    uptime = round(time.time() - start_time, 2) 
+    return {
+        "service": "LEO Rigging AI",
+        "status": "healthy",
+        "uptime_seconds": uptime,
+        "version": "0.2.2"
+    }
 
 @app.get("/")
 def root():
