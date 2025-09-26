@@ -1,52 +1,31 @@
-name: Deploy to EC2
+name: Deploy (self-hosted)
 
 on:
   push:
-    branches: ["main"]   # Trigger deploy only when pushing to main branch
+    branches: ["main"]
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-
+    runs-on: self-hosted   # 👈 runs on your EC2
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: Copy files to EC2
-      uses: appleboy/scp-action@v0.1.7
       with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USER }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        source: "."
-        target: "~/rigbot"
+        fetch-depth: 0
 
-    - name: Rebuild and restart container on EC2
-      uses: appleboy/ssh-action@v1.0.0
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USER }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        timeout: 60m   # ⏳ Allow up to 60 minutes for build
-        script: |
-          cd ~/rigbot
-          
-          echo "🧹 Cleaning old Docker images..."
-          docker system prune -af || true
+    - name: Build Docker image
+      run: |
+        cd ~/rigbot
+        docker system prune -af || true
+        docker build -t rigbot .
 
-          echo "🐳 Building new Docker image..."
-          docker build --no-cache -t rigbot .
-
-          echo "🛑 Stopping old container..."
-          docker rm -f rigbot || true
-
-          echo "🚀 Starting new container..."
-          docker run -d --name rigbot --restart unless-stopped \
-            -p 80:8000 \
-            --env-file .env \
-            -v /data/rigbot/source_pdfs:/app/app/data/source_pdfs \
-            -v /data/rigbot/vectorstore:/app/app/data/vectorstore \
-            -v /data/rigbot/hf_cache:/root/.cache/huggingface \
-            rigbot
-
-          echo "✅ Deployment complete!"
+    - name: Restart container
+      run: |
+        docker rm -f rigbot || true
+        docker run -d --name rigbot --restart unless-stopped \
+          -p 80:8000 \
+          --env-file /home/ubuntu/rigbot/.env \
+          -v /data/rigbot/source_pdfs:/app/app/data/source_pdfs \
+          -v /data/rigbot/vectorstore:/app/app/data/vectorstore \
+          -v /data/rigbot/hf_cache:/root/.cache/huggingface \
+          rigbot
