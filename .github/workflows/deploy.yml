@@ -6,26 +6,37 @@ on:
 
 jobs:
   deploy:
-    runs-on: self-hosted   
+    runs-on: self-hosted
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Build Docker image
-      run: |
-        cd ~/rigbot
-        docker system prune -af || true
-        docker build -t rigbot .
+      # 🔹 Set up Docker Buildx (modern builder with cache support)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Restart container
-      run: |
-        docker rm -f rigbot || true
-        docker run -d --name rigbot --restart unless-stopped \
-          -p 80:8000 \
-          --env-file /home/ubuntu/rigbot/.env \
-          -v /data/rigbot/source_pdfs:/app/app/data/source_pdfs \
-          -v /data/rigbot/vectorstore:/app/app/data/vectorstore \
-          -v /data/rigbot/hf_cache:/root/.cache/huggingface \
-          rigbot
+      # 🔹 Build & cache the image
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: rigbot:latest
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
+
+      # 🔹 Restart container with latest image
+      - name: Restart container
+        run: |
+          docker rm -f rigbot || true
+          docker run -d --name rigbot --restart unless-stopped \
+            -p 80:8000 \
+            --env-file /home/ubuntu/rigbot/.env \
+            -v /data/rigbot/source_pdfs:/app/app/data/source_pdfs \
+            -v /data/rigbot/vectorstore:/app/app/data/vectorstore \
+            -v /data/rigbot/hf_cache:/root/.cache/huggingface \
+            rigbot:latest

@@ -1,31 +1,39 @@
-# Dockerfile
-FROM python:3.11-slim
+# Use a slightly larger base (bullseye) for easier builds
+FROM python:3.11-bullseye
 
-# ---- System packages needed by Tesseract & PyMuPDF ----
+# --- System dependencies (Tesseract, PyMuPDF, langdetect, chromadb) ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
-    # add extra languages if you’ll OCR Arabic/Hindi/etc.
-    # tesseract-ocr-ara tesseract-ocr-hin \
+    tesseract-ocr-eng \
     build-essential \
     libgl1 \
+    pkg-config \
+    git \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Workdir
+# Set working dir
 WORKDIR /app
 
-# Copy and install Python deps first (leverages Docker layer cache)
+# --- Dependency installation ---
+# Copy only requirements first (for Docker cache)
 COPY requirements.txt .
+
+# Upgrade pip/setuptools/wheel to latest
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the source
+# --- Copy source code ---
 COPY . .
 
-# Run as non-root (optional but good practice)
-# RUN useradd -m appuser && chown -R appuser:appuser /app
-# USER appuser
+# --- Runtime user (security best practice) ---
+RUN useradd -m appuser && chown -R appuser:appuser /app
+USER appuser
 
-# The FastAPI app listens on 8000
+# Expose FastAPI port
 EXPOSE 8000
 
-# Start the API
+# --- Entrypoint ---
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
