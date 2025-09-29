@@ -69,7 +69,7 @@ start_time = time.time()
 # Health & info
 @app.get("/health")
 def health():
-    uptime = round(time.time() - start_time, 2) 
+    uptime = round(time.time() - start_time, 2)  # seconds
     return {
         "service": "LEO Rigging AI",
         "status": "healthy",
