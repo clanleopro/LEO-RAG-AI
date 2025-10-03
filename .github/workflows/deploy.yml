@@ -26,15 +26,18 @@ jobs:
           file: ./Dockerfile
           push: false
           tags: rigbot:latest
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
+          cache-from: type=local,src=/home/ubuntu/.buildx-cache
+          cache-to: type=local,dest=/home/ubuntu/.buildx-cache,mode=max
+
+      - name: Cleanup old images
+        run: docker image prune -f
 
       # 🔹 Restart container with latest image
       - name: Restart container
         run: |
           docker rm -f rigbot || true
           docker run -d --name rigbot --restart unless-stopped \
-            -p 80:8000 \
+            -p 8080:8000 \
             --env-file /home/ubuntu/rigbot/.env \
             -v /data/rigbot/source_pdfs:/app/app/data/source_pdfs \
             -v /data/rigbot/vectorstore:/app/app/data/vectorstore \
