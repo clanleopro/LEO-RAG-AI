@@ -10,31 +10,30 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      # 1️⃣ Checkout latest code
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      # 2️⃣ Set up Docker Buildx (for better caching and features)
+      # 🔹 Set up Docker Buildx (modern builder with cache support)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 3️⃣ Build Docker image with caching enabled
-      - name: Build and load Docker image
+      # 🔹 Build & cache the image
+      - name: Build Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
-          # Load the image into the local Docker daemon instead of pushing to a registry
-          load: true
-          # 'cache-from' and 'cache-to' enable intelligent caching
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          file: ./Dockerfile
+          push: false
           tags: rigbot:latest
+          cache-from: type=local,src=/home/ubuntu/.buildx-cache
+          cache-to: type=local,dest=/home/ubuntu/.buildx-cache,mode=max
 
-      # 4️⃣ Cleanup dangling images (safer to run this after a successful build)
       - name: Cleanup old images
         run: docker image prune -f
 
-      # 5️⃣ Restart container with latest image
+      # 🔹 Restart container with latest image
       - name: Restart container
         run: |
           docker rm -f rigbot || true
