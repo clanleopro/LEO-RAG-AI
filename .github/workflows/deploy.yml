@@ -13,19 +13,28 @@ jobs:
       # 1️⃣ Checkout latest code
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # 2️⃣ Set up Docker Buildx (for better caching and features)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 3️⃣ Build Docker image with caching enabled
+      - name: Build and load Docker image
+        uses: docker/build-push-action@v6
         with:
-          fetch-depth: 0
+          context: .
+          # Load the image into the local Docker daemon instead of pushing to a registry
+          load: true
+          # 'cache-from' and 'cache-to' enable intelligent caching
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: rigbot:latest
 
-      # 2️⃣ Build Docker image fresh (no cache)
-      - name: Build Docker image
-        run: |
-          docker build --no-cache --pull -t rigbot:latest .
-
-      # 3️⃣ Cleanup dangling images (optional)
+      # 4️⃣ Cleanup dangling images (safer to run this after a successful build)
       - name: Cleanup old images
         run: docker image prune -f
 
-      # 4️⃣ Restart container with latest image
+      # 5️⃣ Restart container with latest image
       - name: Restart container
         run: |
           docker rm -f rigbot || true
