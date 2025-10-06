@@ -1,4 +1,4 @@
-name: Deploy (self-hosted)
+name: Deploy (self-hosted, low-resource)
 
 on:
   push:
@@ -12,35 +12,54 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      # 🔹 Set up Docker Buildx (modern builder with cache support)
+      # 🔹 CRITICAL: Add swap space to prevent runner crashes on low-memory instances
+      - name: Set up swap space
+        run: |
+          # Check if swapfile exists, if not, create it
+          if [ ! -f /swapfile ]; then
+            sudo fallocate -l 4G /swapfile
+            sudo chmod 600 /swapfile
+            sudo mkswap /swapfile
+            sudo swapon /swapfile
+            echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+            echo "Swap file created and enabled."
+          else
+            echo "Swap file already exists."
+          fi
+          # Verify swap is active
+          sudo swapon --show
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 🔹 Build & cache the image
-      - name: Build Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: false
-          tags: rigbot:latest
-          cache-from: type=local,src=/home/ubuntu/.buildx-cache
-          cache-to: type=local,dest=/home/ubuntu/.buildx-cache,mode=max
-
-      - name: Cleanup old images
-        run: docker image prune -f
-
-      # 🔹 Restart container with latest image
-      - name: Restart container
+      # 🔹 Build, Stop, Prune, and Run in a single, efficient script
+      - name: Deploy to Docker
         run: |
-          docker rm -f rigbot || true
-          docker run -d --name rigbot --restart unless-stopped \
+          IMAGE_NAME="rigbot:latest"
+          CONTAINER_NAME="rigbot"
+
+          echo "1. Building new Docker image: $IMAGE_NAME"
+          # Build the image using the local cache to speed things up
+          docker build \
+            --cache-from=type=local,src=/home/ubuntu/.buildx-cache \
+            --cache-to=type=local,dest=/home/ubuntu/.buildx-cache,mode=max \
+            -t $IMAGE_NAME .
+          
+          echo "2. Stopping and removing old container: $CONTAINER_NAME"
+          # This will succeed even if the container doesn't exist
+          docker rm -f $CONTAINER_NAME || true
+
+          echo "3. Pruning old, unused Docker images"
+          docker image prune -f
+
+          echo "4. Starting new container: $CONTAINER_NAME"
+          docker run -d --name $CONTAINER_NAME --restart unless-stopped \
             -p 8080:8000 \
             --env-file /home/ubuntu/rigbot/.env \
             -v /data/rigbot/source_pdfs:/app/app/data/source_pdfs \
             -v /data/rigbot/vectorstore:/app/app/data/vectorstore \
             -v /data/rigbot/hf_cache:/root/.cache/huggingface \
-            rigbot:latest
+            $IMAGE_NAME
+          
+          echo "✅ Deployment complete."

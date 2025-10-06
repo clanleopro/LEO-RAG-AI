@@ -1,13 +1,13 @@
 # =====================================================================
-# Stage 1: The "Builder" Stage
-#
-# This stage installs all dependencies, including heavy build tools,
-# and compiles the Python packages.
+# Stage 1: Builder
+# Compiles dependencies in a full build environment.
 # =====================================================================
 FROM python:3.11-bullseye AS builder
 
+# Set an environment variable to prevent prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
 # Install build-time system dependencies
-# These are needed to install Python packages but not to run the app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
@@ -17,25 +17,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy and install Python dependencies
-# This leverages Docker's cache. The packages will be compiled here.
+# Install Python dependencies efficiently
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application source code
+# Copy application source code
 COPY . .
 
 # =====================================================================
-# Stage 2: The "Final" Stage
-#
-# This is the lean, production-ready image. We start from a fresh
-# Python base and copy only the necessary artifacts from the builder.
+# Stage 2: Final
+# Creates the lean, final image for production.
 # =====================================================================
 FROM python:3.11-bullseye
 
-# Install RUNTIME system dependencies ONLY
-# Notice 'build-essential' and 'git' are gone.
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install only RUNTIME system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-eng \
@@ -44,19 +42,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# --- Copy Artifacts from Builder Stage ---
-# Copy the installed Python packages from the 'builder' stage
+# Copy compiled Python packages and source code from the builder stage
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-# Copy the application code from the 'builder' stage
 COPY --from=builder /app /app
 
-# --- Runtime user (security best practice) ---
-# Create a non-root user to run the application
+# Create a non-root user for security
 RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
 
-# Expose FastAPI port
+# Expose port and define the entrypoint
 EXPOSE 8000
-
-# --- Entrypoint ---
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
