@@ -2,18 +2,30 @@
 .env
 .env.*
 
-# Python
+# Python cache & venv
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+*.pyd
 .venv/
+venv/
+build/
+dist/
+
+# Logs and debug output
+*.log
+*.sqlite3
+*.db
 
 # App data
 app/data/processed/
-
-# Ignore vector DB and heavy PDFs
 app/data/vectorstore/
 app/data/source_pdfs/*.pdf
 
+# Temporary / runtime files
+tmp/
+*.tmp
+*.bak
 
 # OS/editor noise
 .DS_Store
