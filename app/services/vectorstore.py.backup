@@ -30,13 +30,9 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-# pyrefly: ignore [missing-import]
 import chromadb
-# pyrefly: ignore [missing-import]
 import numpy as np
-# pyrefly: ignore [missing-import]
 from chromadb.config import Settings
-# pyrefly: ignore [missing-import]
 from rank_bm25 import BM25Okapi
 
 from . import config, embeddings
@@ -170,15 +166,12 @@ def _norm(vals: List[float]) -> List[float]:
     if not vals:
         return []
     arr = np.array(vals, dtype=np.float32)
-    # If all values are effectively zero
-    if (np.abs(arr) < 1e-6).all():
-        return [0.0] * len(arr)
-    # If all values are exactly the same
     if float(arr.std()) < 1e-6:
-        return [1.0] * len(arr)
-    # Normalize linearly to [0, 1] range rather than z-score to avoid negative relevance
-    z_min, z_max = float(arr.min()), float(arr.max())
-    return [float((v - z_min) / (z_max - z_min + 1e-6)) for v in arr]
+        mx = float(abs(arr).max())
+        return [float(v / (mx + 1e-6)) for v in arr]
+    z = (arr - arr.mean()) / (arr.std() + 1e-6)
+    z_min, z_max = float(z.min()), float(z.max())
+    return [float((v - z_min) / (z_max - z_min + 1e-6)) for v in z]
 
 
 # ─────────────────────────────────────────────────────────────
@@ -198,7 +191,7 @@ def _get_collection():
     except Exception:
         return _client.create_collection(
             _COLLECTION_NAME,
-            metadata={"embedding_model": config.ENV.EMBED_MODEL, "created": time.time(), "hnsw:space": "cosine"},
+            metadata={"embedding_model": config.ENV.EMBED_MODEL, "created": time.time()},
         )
 
 
@@ -336,9 +329,15 @@ def upsert_chunks(chunks: List[Chunk]) -> int:
             )
             start = end
         except Exception as e:
-            # We no longer silently retry with smaller batch sizes.
-            # Invalid metadata or embeddings should fail explicitly.
-            raise RuntimeError(f"Chroma upsert failed: {e}") from e
+            msg = str(e)
+            hinted = _parse_max_batch_from_msg(msg)
+            if hinted is not None and hinted < batch_size:
+                log.warning("Chroma hinted max batch=%d (was %d). Reducing.", hinted, batch_size)
+                batch_size = max(1, hinted)
+            else:
+                # A smaller batch cannot repair invalid metadata, embeddings,
+                # authentication, storage, or other deterministic failures.
+                raise
 
     rebuild_bm25_index()
     return len(ids)
@@ -485,10 +484,8 @@ def hybrid_search(
     dense_sims: Dict[str, float] = {}
     dense_payload: Dict[str, Tuple[str, Dict]] = {}
     for i, _id in enumerate(ids_d):
-        # Chroma returns distance. In cosine space, cosine_similarity = 1 - distance.
-        sim = 1.0 - float(dists[i]) if i < len(dists) else 0.0
-        # For numerical stability, clip to [0.0, 1.0] (in case floating point causes > 1 or < 0)
-        sim = max(0.0, min(1.0, sim))
+        # Chroma returns L2 distance; convert to cosine similarity
+        sim = max(0.0, 1.0 - float(dists[i])) if i < len(dists) else 0.0
         dense_sims[_id] = sim
         t = docs_d[i] if i < len(docs_d) else ""
         m = metas_d[i] if i < len(metas_d) else {}

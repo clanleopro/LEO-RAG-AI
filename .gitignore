@@ -1,6 +1,13 @@
-# Environment and secrets
+# Environment and secrets — NEVER commit real credentials
 .env
 .env.*
+!.env.example
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+
 
 # Python cache & venv
 __pycache__/
