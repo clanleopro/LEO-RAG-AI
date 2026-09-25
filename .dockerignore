@@ -1,0 +1,38 @@
+.git
+.github
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox
+.coverage
+.coverage.*
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.pylintrc
+.pytest_cache
+
+# Exclude local .env
+.env
+.env.*
+secrets/
+
+# Exclude data directories (mounted as volumes in production)
+app/data/processed/
+app/data/vectorstore/
+app/data/source_pdfs/
+
+# Testing
+tests/
+
+# Ignore Docker-related files
+Dockerfile
+.dockerignore
