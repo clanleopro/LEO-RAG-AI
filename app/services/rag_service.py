@@ -3,9 +3,8 @@
 Grounded RAG pipeline for LEO Rigging AI.
 
 Key safety properties:
-- Minimum relevance threshold: chunks below MIN_RELEVANCE_SCORE are
-  discarded; if none remain, a grounded refusal is returned.
-- No "10% external knowledge" permission — answers must come from documents.
+- Minimum relevance threshold filters weak retrieval before document answering.
+- If documents do not answer, a separately labeled general answer is generated.
 - Context budgeted by complete chunks (not blind character truncation).
 - Citations verified: only chunks actually included in context are cited.
 - Prompt-injection delimiters around retrieved content.
@@ -35,7 +34,7 @@ _HIGH_RISK_PATTERNS = [
         r"\bload\s+chart\b",
         r"\bsafety\s+factor\b",
         r"\bsling\s+select\b",
-        r"\binspect\b.*\bdamage\b",
+        r"\binspect\b.*\bdamag(?:e|ed)\b",
         r"\bdamaged\b.*\bequipment\b",
         r"\bengineered\s+lift\b",
         r"\bregulator\w*\s+compli\w*\b",
@@ -203,6 +202,28 @@ def _clarifying_questions(question: str) -> str:
     )
 
 
+_NO_ANSWER = "PDF_NO_ANSWER"
+
+
+def _general_answer(query: str, high_risk: bool, hit_count: int = 0) -> Dict:
+    """Use model knowledge only when the ingested documents cannot answer."""
+    text = llm.generate_general(user_query=query)
+    if not text:
+        raise llm.LLMUnavailableError("Empty general answer")
+    answer_text = text
+    if high_risk:
+        answer_text += _SAFETY_NOTICE
+    return {
+        "answer": answer_text,
+        "citations": [],
+        "low_confidence": True,
+        "grounded": False,
+        "used_provider": config.ENV.LLM_PROVIDER,
+        "meta": {"hit_count": hit_count, "high_risk": high_risk,
+                 "answer_source": "general_knowledge"},
+    }
+
+
 # ─────────────────────────────────────────────────────────────
 # Main answer function
 # ─────────────────────────────────────────────────────────────
@@ -224,26 +245,21 @@ def answer(
     grounded is NEVER set True unless generation actually succeeded.
     """
     high_risk = _is_high_risk(query)
+    if not llm.is_industry_related(query):
+        return {
+            "answer": "I can help with rigging, heavy lifting, cranes, hoisting, and related oil and gas work. Please ask a question in those areas.",
+            "citations": [],
+            "low_confidence": False,
+            "grounded": False,
+            "used_provider": config.ENV.LLM_PROVIDER,
+            "meta": {"hit_count": 0, "high_risk": False, "answer_source": "out_of_scope"},
+        }
     hits = retrieve(query, top_k=top_k, filter_doc=filter_doc)
     context, raw_citations = build_context(hits, max_context_chars=max_context_chars)
 
     # ── No relevant context found ─────────────────────────────
     if not context.strip():
-        refusal = (
-            "The available ingested documents do not provide enough reliable information "
-            "to answer this question. Please ensure the relevant document has been uploaded "
-            "and ingested, or consult the original standard/manual directly."
-        )
-        if high_risk:
-            refusal += _SAFETY_NOTICE
-        return {
-            "answer": refusal,
-            "citations": [],
-            "low_confidence": True,
-            "grounded": False,
-            "used_provider": config.ENV.LLM_PROVIDER,
-            "meta": {"hit_count": 0, "top_sources": [], "high_risk": high_risk},
-        }
+        return _general_answer(query, high_risk)
 
     # ── Generate answer ──────────────────────────────────────
     system = config.SYSTEM_PROMPT
@@ -254,12 +270,25 @@ def answer(
             "(1) ask for jurisdiction, governing standard, manufacturer/model, "
             "configuration, and document revision where they affect the answer; "
             "(2) NOT approve any lift plan, capacity, or operation; "
-            "(3) include the safety notice at the end of your response."
+            "(3) include the safety notice for any substantive answer. "
+            "If the excerpts do not answer, output only PDF_NO_ANSWER."
         )
 
     # llm.generate raises LLMError subclasses on failure.
     # Let them propagate — the router sets grounded:false and the correct HTTP code.
     text = llm.generate(system=system, context=context, user_query=query)
+
+    if text.strip().upper().strip(". `\n") == _NO_ANSWER:
+        return _general_answer(query, high_risk, hit_count=len(hits))
+    if not text or not re.search(r"\[(\d+)\]", text):
+        # A document answer without a source marker cannot be displayed as grounded.
+        return _general_answer(query, high_risk, hit_count=len(hits))
+
+    used_numbers = {int(n) for n in re.findall(r"\[(\d+)\]", text)}
+    available_numbers = {c["n"] for c in raw_citations}
+    if not used_numbers.issubset(available_numbers):
+        return _general_answer(query, high_risk, hit_count=len(hits))
+    cited = [c for c in raw_citations if c["n"] in used_numbers]
 
     # Append safety notice for high-risk topics
     if high_risk and _SAFETY_NOTICE not in text:
@@ -272,7 +301,7 @@ def answer(
     # grounded:True is set ONLY after a successful generation
     return {
         "answer": text,
-        "citations": raw_citations,
+        "citations": cited,
         "low_confidence": False,
         "grounded": True,
         "used_provider": config.ENV.LLM_PROVIDER,
@@ -281,5 +310,6 @@ def answer(
             "top_sources": list({h.source for h in hits}),
             "high_risk": high_risk,
             "context_chars_used": len(context),
+            "answer_source": "documents",
         },
     }

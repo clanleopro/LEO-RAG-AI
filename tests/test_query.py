@@ -15,11 +15,14 @@ def test_query_validation(client: TestClient, query_headers: dict):
     response = client.post("/api/query", headers=query_headers, json={"question": "test", "filter_doc": "../etc/passwd"})
     assert response.status_code == 422
 
-def test_query_empty_store(client: TestClient, query_headers: dict):
+def test_query_empty_store(client: TestClient, query_headers: dict, monkeypatch):
+    monkeypatch.setattr("app.services.llm.generate_general", lambda user_query: "A general explanation.")
     response = client.post("/api/query", headers=query_headers, json={"question": "What is the capacity?"})
     assert response.status_code == 200
     data = response.json()
     assert data["grounded"] is False
     assert data["low_confidence"] is True
-    assert "do not provide enough reliable information" in data["answer"]
+    assert data["answer"].startswith("A general explanation.")
+    assert "General information" not in data["answer"]
     assert len(data["citations"]) == 0
+    assert data["meta"]["answer_source"] == "general_knowledge"
