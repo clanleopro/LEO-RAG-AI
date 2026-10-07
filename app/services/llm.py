@@ -14,8 +14,9 @@ Security controls:
     LLMUnavailableError  → HTTP 503 (provider 5xx or connection failure)
     LLMBadRequestError   → HTTP 500 (application bug or malformed input)
 - Credentials are never logged. Error messages are sanitized.
-- No "10% external knowledge" instruction.
-"""
+- General knowledge is used only by the explicit fallback path.
+
+
 from __future__ import annotations
 
 import logging
