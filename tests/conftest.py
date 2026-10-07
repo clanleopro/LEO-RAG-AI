@@ -67,8 +67,6 @@ def mock_embeddings():
 def mock_llm():
     """Mock OpenAI API calls."""
     with patch("app.services.llm.generate", return_value="Mocked LLM answer.") as mock_gen, \
-         patch("app.services.llm.generate_general", return_value="Mocked general answer."), \
-         patch("app.services.llm.is_industry_related", return_value=True), \
          patch("app.services.llm.stream_chat") as mock_stream:
         mock_stream.return_value = (c for c in ["Mocked", " LLM", " answer."])
         yield mock_gen
